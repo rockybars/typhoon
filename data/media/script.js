@@ -18,6 +18,8 @@ function getZipCode(location, callback) {
 }
 
 function getWeatherData(currentData, callback) {
+  if (typeof currentData == 'string')
+    currentData = JSON.parse(currentData)
   var weatherForecastUri = "http://api.openweathermap.org/data/2.5/forecast/daily"
 	$.ajax({
 		url: weatherForecastUri + "?id=" + currentData.id,
@@ -38,6 +40,9 @@ function generateStats(data, callback) {
 	//Weather Object
 	weather = {}
   var current = data.current;
+
+  if (!current || !current.main)
+    return show_settings("location")
 
 	//Location
 	weather.city = city.name;
@@ -60,12 +65,11 @@ function generateStats(data, callback) {
 
 	//Weekly Weather
 	weekArr = data.list;
-  console.log(weekArr);
 	weather.week = []
 	for (var i=0; i<5; i++) {
 		weather.week[i] = {}
 		weather.week[i].day = new Date(weekArr[i].dt * 1000).toString().split(' ')[0]
-		weather.week[i].code = "26"
+		weather.week[i].code = "0"
 		weather.week[i].low = (weekArr[i].temp.max - 273.15) * 1.8000 + 32.00
 		weather.week[i].high = (weekArr[i].temp.min - 273.15) * 1.8000 + 32.00
 	}
@@ -261,9 +265,15 @@ $(document).ready(function() {
 
 	//APP START.
 	init_settings()
-	if (localStorage.typhoon) {
+	if (!localStorage.typhoon || typeof localStorage.typhoon != "string") {
 		show_settings("location")
 	} else {
+    try {
+      JSON.parse(localStorage.typhoon)
+    }
+    catch(ex) {
+      return show_settings("location")
+    }
 		//Has been run before
 		render(localStorage.typhoon)
 
