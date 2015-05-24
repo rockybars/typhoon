@@ -1,36 +1,30 @@
 function getZipCode(location, callback) {
-	//If it's a woeid, we bypass the first step
+	//If it's a cityid, we bypass the first step
 	if ($.isNumeric(location)) {
-		woeid_request(location, callback)
+		cityid_request(location, callback)
 	//If they use a normal location
 	} else {
-		$.get("http://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20geo.places%20where%20text%3D%22" + encodeURIComponent(location) + "%22&format=xml", function(locationData) {
-			// Gets the WOEID && Caches Location Name
-			var woeid = $(locationData).children().children().children().first().children().filterNode("woeid").text()
-			localStorage.typhoon_location = $(locationData).children().children().children().first().children().filterNode("name").text()
-			if (woeid) {
-				// WOEID Request to find Global ZIP Code
-				woeid_request(woeid, callback)
+    var currentWeatherUri = "http://api.openweathermap.org/data/2.5/weather"
+		$.get(currentWeatherUri + "?q=" + encodeURIComponent(location), function(locationData) {
+			// Gets the cityId && Caches Location Name
+			localStorage.typhoon_location = locationData.name 
+			if (locationData.id) {
+				callback(locationData)
 			} else {
 				callback()
 			}
 		})
 	}
-
-	function woeid_request(woeid, callback) {
-		$.get("http://weather.yahooapis.com/forecastrss?w=" + woeid, function(woeidData) {
-			//Cache Name
-			callback($(woeidData).children().children().children().filterNode("item").children().filterNode("guid").text().substring(0,8))
-		})
-	}
 }
 
-function getWeatherData(zipCode, callback) {
+function getWeatherData(currentData, callback) {
+  var weatherForecastUri = "http://api.openweathermap.org/data/2.5/forecast/daily"
 	$.ajax({
-		url: 'http://xml.weather.yahoo.com/forecastrss/' + zipCode + '_f.xml?'+(Math.random() * 100),
+		url: weatherForecastUri + "?id=" + currentData.id,
 		success: function(data) {
 			$('#errorMessage').fadeOut(350)
-			callback($(data).children().children().children())
+      data.current = currentData;
+      callback(data);
 		},
 		error: function(data) {
 			if (data.status === 0) {
@@ -43,39 +37,41 @@ function getWeatherData(zipCode, callback) {
 function generateStats(data, callback) {
 	//Weather Object
 	weather = {}
+  var current = data.current;
 
 	//Location
-	weather.city = $(data).filterNode('yweather:location').attr("city")
-	weather.country = $(data).filterNode('yweather:location').attr("country")
+	weather.city = city.name;
+	weather.country = city.country;
 
 	//Link
-	weather.link = $(data).filterNode('item').children().filterNode("link").text()
+	//weather.link = $(data).filterNode('item').children().filterNode("link").text()
 
 	//Temperature
-	weather.temperature = $(data).filterNode('item').children().filterNode("yweather:condition").attr("temp")
-	weather.temperatureUnit = $(data).filterNode('yweather:units').attr("temperature")
+	weather.temperature = (current.main.temp - 273.15) * 1.8000 + 32.00
+	weather.temperatureUnit = "k"
 
 	//Wind
-	weather.windUnit = $(data).filterNode('yweather:units').attr("speed")
-	weather.windSpeed = $(data).filterNode('yweather:wind').attr("speed")
-	weather.windDirection = $(data).filterNode('yweather:wind').attr('direction')
+	weather.windUnit = 'mph'
+	weather.windSpeed = current.wind.speed
+	weather.windDirection = current.wind.direction 
 
 	//Humidity
-	weather.humidity = $(data).filterNode('yweather:atmosphere').attr('humidity')
+	weather.humidity = current.main.humidity 
 
 	//Weekly Weather
-	weekArr = $(data).filterNode("item").children().filterNode("yweather:forecast")
+	weekArr = data.list;
+  console.log(weekArr);
 	weather.week = []
 	for (var i=0; i<5; i++) {
 		weather.week[i] = {}
-		weather.week[i].day = $(weekArr[i]).attr("day")
-		weather.week[i].code = $(weekArr[i]).attr("code")
-		weather.week[i].low = $(weekArr[i]).attr("low")
-		weather.week[i].high = $(weekArr[i]).attr("high")
+		weather.week[i].day = new Date(weekArr[i].dt * 1000).toString().split(' ')[0]
+		weather.week[i].code = "26"
+		weather.week[i].low = (weekArr[i].temp.max - 273.15) * 1.8000 + 32.00
+		weather.week[i].high = (weekArr[i].temp.min - 273.15) * 1.8000 + 32.00
 	}
 
 	//Current Weather
-	weather.code = $(data).filterNode('item').children().filterNode("yweather:condition").attr("code")
+	weather.code = "3200" 
 	if (weather.code == "3200") {
 		weather.code = weather.week[0].code
 	}
@@ -89,8 +85,8 @@ function render(location) {
 	$('.border .sync').addClass('busy');
 	$(".border .settings").show()
 
-	getWeatherData(location, function(rawdata) {
-		generateStats(rawdata, function(weather) {
+	getWeatherData(location, function(currentdata) {
+		generateStats(currentdata, function(weather) {
 			$('#city span').html('<a href="' + weather.link + '">' + localStorage.typhoon_location + '</a>')
 			$("#code").text(weather_code(weather.code)).attr("class", "w" + weather.code)
 
@@ -107,7 +103,7 @@ function render(location) {
 			}
 			document.title = temp
 
-			var windSpeed = weather.windSpeed
+			var windSpeed = weather.windSpeed * 0.621371;
 			if (localStorage.typhoon_speed != "mph") {
 				//Converts to either kph or m/s
 				windSpeed = (localStorage.typhoon_speed == "kph") ? Math.round(windSpeed * 1.609344) : Math.round(windSpeed * 4.4704) /10
@@ -265,7 +261,7 @@ $(document).ready(function() {
 
 	//APP START.
 	init_settings()
-	if (!localStorage.typhoon) {
+	if (localStorage.typhoon) {
 		show_settings("location")
 	} else {
 		//Has been run before
@@ -314,6 +310,7 @@ function init_settings() {
 		$("#locationModal .loader").attr("class", "loading loader").html("|")
 		getZipCode(locationInput.val(), function(zipCode) {
 			if (zipCode) {
+        zipCode = JSON.stringify(zipCode);
 				$("#locationModal .loader").attr("class", "tick loader").html("&#10003;").attr("data-code", zipCode)
 			} else {
 				$("#locationModal .loader").attr("class", "loader").html("&#10005;")
@@ -325,7 +322,7 @@ function init_settings() {
 	$("#locationModal .loader").click(function() {
 		if ($(this).hasClass("tick")) {
 			localStorage.typhoon = $("#locationModal .loader").attr("data-code")
-			render(localStorage.typhoon)
+			render(JSON.parse(localStorage.typhoon))
 			show_settings("noweather")
 			setInterval(function() {
 				console.log("Updating Data...")
@@ -420,5 +417,5 @@ function opacity() {
 	}
 	$('input[type=range]').val(localStorage.app_opacity)
 	document.title = "o" + localStorage.app_opacity
-	document.title = enable_drag
+	// document.title = enable_drag
 }
