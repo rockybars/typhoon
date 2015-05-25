@@ -36,22 +36,28 @@ function getWeatherData(currentData, callback) {
 	});
 }
 
+function suffix(sunrise, sunset) {
+  sunrise *= 1000
+  sunset *= 1000
+  var now = new Date().valueOf();
+  if (now >= sunrise && now < sunset)
+    return "-d"
+  return "-n"
+}
+
 function generateStats(data, callback) {
 	//Weather Object
 	weather = {}
   var current = data.current;
-
+  
   if (!current || !current.main)
     return show_settings("location")
 
 	//Location
 	weather.city = city.name;
 	weather.country = city.country;
-
-	//Link
-	//weather.link = $(data).filterNode('item').children().filterNode("link").text()
-
-	//Temperature
+	
+  //Temperature
 	weather.temperature = (current.main.temp - 273.15) * 1.8000 + 32.00
 	weather.temperatureUnit = "k"
 
@@ -64,22 +70,19 @@ function generateStats(data, callback) {
 	weather.humidity = current.main.humidity 
 
 	//Weekly Weather
-	weekArr = data.list;
+	weekArr = data.list
 	weather.week = []
 	for (var i=0; i<5; i++) {
 		weather.week[i] = {}
 		weather.week[i].day = new Date(weekArr[i].dt * 1000).toString().split(' ')[0]
-		weather.week[i].code = "0"
+		weather.week[i].code = weekArr[i].weather[0].id + suffix(current.sys.sunrise, current.sys.sunset)
 		weather.week[i].low = (weekArr[i].temp.max - 273.15) * 1.8000 + 32.00
 		weather.week[i].high = (weekArr[i].temp.min - 273.15) * 1.8000 + 32.00
 	}
 
 	//Current Weather
-	weather.code = "3200" 
-	if (weather.code == "3200") {
-		weather.code = weather.week[0].code
-	}
-
+  var currentWeather = current.weather[0] || {}
+	weather.code = currentWeather.id + suffix(current.sys.sunrise, current.sys.sunset)
 	if (callback) {
 		callback(weather)
 	}
@@ -91,8 +94,11 @@ function render(location) {
 
 	getWeatherData(location, function(currentdata) {
 		generateStats(currentdata, function(weather) {
-			$('#city span').html('<a href="' + weather.link + '">' + localStorage.typhoon_location + '</a>')
-			$("#code").text(weather_code(weather.code)).attr("class", "w" + weather.code)
+      localStorage.typhoon_location = currentdata.city.name
+			$('#city span').text(localStorage.typhoon_location)
+			$("#icon").removeClass()
+      $("#icon").addClass("owf")
+      $("#icon").addClass("owf-" + weather.code) // todo night and day
 
 			//Sets initial temp as Fahrenheit
 			var temp = weather.temperature
@@ -107,7 +113,8 @@ function render(location) {
 			}
 			document.title = temp
 
-			var windSpeed = weather.windSpeed * 0.621371;
+			var windSpeed = weather.windSpeed * 0.621371
+      windSpeed = windSpeed.toPrecision(2)
 			if (localStorage.typhoon_speed != "mph") {
 				//Converts to either kph or m/s
 				windSpeed = (localStorage.typhoon_speed == "kph") ? Math.round(windSpeed * 1.609344) : Math.round(windSpeed * 4.4704) /10
@@ -122,7 +129,7 @@ function render(location) {
 			//Weekly Bro.
 			for (var i=0; i<5; i++) {
 				$('#' + i + ' .day').text(weather.week[i].day)
-				$('#' + i + ' .code').text(weather_code(weather.week[i].code))
+				$('#' + i + ' .code').addClass("owf").addClass("owf-" + weather.week[i].code)
 				if (localStorage.typhoon_measurement == "c") {
 					$('#' + i + ' .temp').html(Math.round((weather.week[i].high -32)*5/9) + "°<span>" + Math.round((weather.week[i].low -32)*5/9) + "°</span>")
 				} else if (localStorage.typhoon_measurement == "k") {
@@ -254,6 +261,10 @@ function background(temp) {
 
 // Converts Yahoo weather to icon font
 function weather_code(a){var b={0:"(",1:"z",2:"(",3:"z",4:"z",5:"e",6:"e",7:"o",8:"3",9:"3",10:"9",11:"9",12:"9",13:"o",14:"o",15:"o",16:"o",17:"e",18:"e",19:"s",20:"s",21:"s",22:"s",23:"l",24:"l",25:"`",26:"`",27:"2",28:"1",29:"2",30:"1",31:"/",32:"v",33:"/",34:"v",35:"e",36:"v",37:"z",38:"z",39:"z",40:"3",41:"o",42:"o",43:"o",44:"`",45:"z",46:"o",47:"z",3200:"`"};return b[a]}
+
+function weather_code(a) {
+  return "0";
+}
 
 $(document).ready(function() {
 	//Filters Proprietary RSS Tags
@@ -427,5 +438,5 @@ function opacity() {
 	}
 	$('input[type=range]').val(localStorage.app_opacity)
 	document.title = "o" + localStorage.app_opacity
-	document.title = enable_drag
+	// document.title = enable_drag
 }
