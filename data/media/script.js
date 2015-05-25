@@ -427,5 +427,5 @@ function opacity() {
 	}
 	$('input[type=range]').val(localStorage.app_opacity)
 	document.title = "o" + localStorage.app_opacity
-	// document.title = enable_drag
+	document.title = enable_drag
 }
